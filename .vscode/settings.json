@@ -21,6 +21,8 @@
         "istream": "c",
         "scales.h": "c",
         "processor.h": "c",
-        "clocks.h": "c"
+        "clocks.h": "c",
+        "audio_i2s.h": "c",
+        "stdlib.h": "c"
     }
 }

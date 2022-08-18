@@ -3,19 +3,16 @@
 #include "sequencer.h"
 #include "utility.h"
 #include "fr32/fr32.h"
-
-#define oscn 3
+#include "preset.h"
 
 typedef struct
 {
     oscillator osc[oscn];
-    sequencer sq;
-    limiter lim;
-    ltosvf svf;
-    int    cvs[8]; // CV Sources
-    float  cva[8]; // CV Amounts
-    int    pot[9]; // CV Centres
-    int    vcfid;  // Filter type
+    sequencer  sq;
+    limiter    lim;
+    ltosvf     svf;
+    preset     pset;
+
     float* q;
     float* f;
     float  feed;

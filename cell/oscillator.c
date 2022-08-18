@@ -22,7 +22,7 @@ void oscillator_init(oscillator* o)
 ////////////////////////////////////////////////////////////////////////////////////////
 void set_delta(oscillator* o)
 { 
-    int f  = (int)(octave[o->oct] + (octave[o->oct + 1] - octave[o->oct])/4096.0f * (float)o->f);
+    int f  = (int)(octave[o->oct] + (octave[o->oct + 1] - octave[o->oct])/4096.0f * (float)*o->f);
     o->delta = chromatic[f + o->shift] * TAO / SAMPLE_RATE;
 }
 

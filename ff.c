@@ -8,11 +8,8 @@
 #include "hardware/adc.h"
 #include "pico/multicore.h"
 #include "processor.h"
-#include "hardware/flash.h"
-#include "hardware/sync.h"
-#include "littlefs-lib/pico_hal.h"
 
-#define FLASH_TARGET_OFFSET (512 * 1024) // choosing to start at 512K
+
 #define SAMPLES_PER_BUFFER 512
 #define DIN_PIN  2
 #define BCLK_PIN 0
@@ -29,25 +26,6 @@
 #define ITEMS 6
 
 
-typedef struct 
-{
-    int      cvs[8];   // CV Sources
-    float    cva[8];   // CV Amounts
-    uint16_t eax[17];
-    uint16_t seq[12];
-    
-    int      sqlength;
-    float    oscfreq[3];
-    int      oscoct[3];
-    int      oscform[3];
-    int      vcfid;
-
-    bool     sqon;
-    bool     envon;
-
-} preset;
-
-preset pset;
 
 SSOLED oled;
 const char*   msrc[] = {"SCA", "SCB", "SCC", "SEQ", "ENV"};
@@ -60,6 +38,7 @@ static uint16_t eap[ENTRIES];
 static uint16_t eax[17];
 static uint16_t seq[12];
 static bool sqpart;
+static int init_file;
 
 
 int16_t entry_handler(int16_t pot_value, int16_t in_value, int_fast8_t pos, int16_t min, int16_t max)
@@ -78,93 +57,6 @@ static char vbuf[7];
 static char runline_a[6];
 static char runline_b[6];
 
-
-
-
-void copyParameters()
-{
-    for(int i = 0; i < 8; i++)
-    {
-        pset.cvs[i] = o.cvs[i];
-        pset.cva[i] = o.cva[i];
-    }
-    for(int i = 0; i < 17; i++)
-    {
-        pset.eax[i] = eax[i];
-    }
-    for(int i = 0; i < 12; i++)
-    {
-        pset.seq[i] = o.sq.note[i];
-    }
-    pset.sqlength = o.sq.length;
-    for(int i = 0; i < 3; i++)
-    {
-        pset.oscfreq[i] = o.osc[i].f;
-        pset.oscoct[i]  = o.osc[i].oct;
-        pset.oscform[i] = o.osc[i].form;
-    }
-    pset.vcfid = o.vcfid;
-    pset.sqon  = o.sq.on;
-    pset.envon = o.sq.env.on;
-}
-
-void loadParameters()
-{
-    for(int i = 0; i < 8; i++)
-    {
-        o.cvs[i] = pset.cvs[i];
-        o.cva[i] = pset.cva[i];
-    }
-    for(int i = 0; i < 17; i++)
-    {
-        eax[i] = pset.eax[i];
-    }
-    for(int i = 0; i < 12; i++)
-    {
-        o.sq.note[i] = pset.seq[i];
-    }
-    o.sq.length = pset.sqlength;
-    for(int i = 0; i < 3; i++)
-    {
-        o.osc[i].f = pset.oscfreq[i];
-        o.osc[i].oct = pset.oscoct[i];
-        o.osc[i].form = pset.oscform[i];
-    }
-    o.vcfid = pset.vcfid;
-    o.sq.on = pset.sqon;
-    o.sq.env.on = pset.envon;
-}
-
-void savePreset() 
-{
-    copyParameters();
-    uint8_t* psetAsBytes = (uint8_t*) &pset;
-    int psetSize = sizeof(preset);
-    
-    int writeSize = (psetSize / FLASH_PAGE_SIZE) + 1; // how many flash pages we're gonna need to write
-    int sectorCount = ((writeSize * FLASH_PAGE_SIZE) / FLASH_SECTOR_SIZE) + 1; // how many flash sectors we're gonna need to erase
-        
-    printf("Programming flash target region...\n");
-
-    uint32_t interrupts = save_and_disable_interrupts();
-    flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE * sectorCount);
-    flash_range_program(FLASH_TARGET_OFFSET, psetAsBytes, FLASH_PAGE_SIZE * writeSize);
-    restore_interrupts(interrupts);
-
-    printf("Done.\n");
-
-}
-
-void loadPreset() 
-{
-    uint32_t interrupts = save_and_disable_interrupts();
-
-    const uint8_t* flash_target_contents = (const uint8_t *) (XIP_BASE + FLASH_TARGET_OFFSET);
-    memcpy(&pset, flash_target_contents + FLASH_PAGE_SIZE, sizeof(preset));
-    loadParameters();
-    
-    restore_interrupts(interrupts);
-}
 
 
 char* progress(int value)
@@ -305,8 +197,8 @@ void core1_interrupt_handler()
                 }
                 else // AM : CVS 0-1-2
                 {
-                    o.cvs[item - 3]++;
-                    if(o.cvs[item - 3] == 5)  o.cvs[item - 3] = 0;
+                    o.pset.cvs[item - 3]++;
+                    if(o.pset.cvs[item - 3] == 5)  o.pset.cvs[item - 3] = 0;
                 }
             }
 
@@ -314,23 +206,23 @@ void core1_interrupt_handler()
             {
                 if(item==0)
                 {
-                    o.vcfid++;
-                    if(o.vcfid == 5) o.vcfid = 0;
+                    o.pset.vcfid++;
+                    if(o.pset.vcfid == 5) o.pset.vcfid = 0;
                 }
                 else if(item==1) // Q
                 {
-                    o.cvs[3]++;
-                    if(o.cvs[3]==5) o.cvs[3] = 0;
+                    o.pset.cvs[3]++;
+                    if(o.pset.cvs[3]==5) o.pset.cvs[3] = 0;
                 }
                 else if(item==2) // Cutoff
                 {
-                    o.cvs[4]++;
-                    if(o.cvs[4]==5) o.cvs[4] = 0;
+                    o.pset.cvs[4]++;
+                    if(o.pset.cvs[4]==5) o.pset.cvs[4] = 0;
                 }
                 else // FM CVS : 5-6-7
                 {
-                    o.cvs[item+2]++;
-                    if( o.cvs[item+2] == 5)  o.cvs[item+2] = 0;
+                    o.pset.cvs[item+2]++;
+                    if( o.pset.cvs[item+2] == 5)  o.pset.cvs[item+2] = 0;
                 }
             }
             else if(page == 3)
@@ -343,25 +235,17 @@ void core1_interrupt_handler()
         }
 
 
-        // if((state_a == 2)&&(state_c == 2))
-        // {
-        //     savePreset();
-        //     oledFill(&oled, 0, 1);
-        //     oledWriteString(&oled, 0,  0, 1, "SAVING... ", 1, 0, 1);
-        //     sleep_ms(1000);
+        if((state_a == 2)&&(state_c == 2))
+        {
+            sleep_ms(600);
+            saveInit();
+        }
 
-
-        // }
-
-        // if((state_a == 2)&&(state_b == 2))
-        // {
-        //     genRand(&o.sq);
-        //     for(int i = 0; i < 12; i++)
-        //     {
-        //         seq[i] = o.sq.note[i] * 4096.0f;
-        //     }
-        //     page = 3;
-        // }
+        if((state_a == 2)&&(state_b == 2))
+        {
+            sleep_ms(600);
+            loadInit();
+        }
 
         // RANDOMIZE //////////////////////////////////////////////////////////////////////
         if((state_b == 2)&&(state_c == 2))
@@ -376,7 +260,7 @@ void core1_interrupt_handler()
 
             for(int i = 0; i < oscn; i++)
             {
-                o.osc[i].f    = rand_in_range(1, 4096);
+                o.pset.freq[i]= rand_in_range(1, 4096);
                 o.osc[i].oct  = rand_in_range(0, 2);
                 o.osc[i].form = rand_in_range(0, 4);
 
@@ -384,40 +268,41 @@ void core1_interrupt_handler()
                 o.osc[i].amp = (float)eax[i + 3]/4096.0f;
 
                 eax[i + 11]   = (float)rand_in_range(1, 4096); // FM
-                o.cva[i + 5]  = eax[i + 11]/4096.0f;           // FM
+                o.pset.cva[i + 5]  = eax[i + 11]/4096.0f;           // FM
 
                 eax[i + 6]    = (float)rand_in_range(1, 4096); // AM
-                o.cva[i]      = eax[i + 6]/4096.0f;            // AM
+                o.pset.cva[i]      = eax[i + 6]/4096.0f;            // AM
 
-                o.cvs[i]      = rand_in_range(0, 4); // AM
-                o.cvs[i + 5]  = rand_in_range(0, 4); // FM
+                o.pset.cvs[i]      = rand_in_range(0, 4); // AM
+                o.pset.cvs[i + 5]  = rand_in_range(0, 4); // FM
 
                 set_delta(&o);
 
-                if     (o.cvs[i    ] == 3) o.osc[i].am = &o.sq.out;
-                else if(o.cvs[i    ] == 4) o.osc[i].am = &o.sq.env.feed;
-                else                       o.osc[i].am = &o.osc[o.cvs[i    ]].out;
+                if     (o.pset.cvs[i    ] == 3) o.osc[i].am = &o.sq.out;
+                else if(o.pset.cvs[i    ] == 4) o.osc[i].am = &o.sq.env.feed;
+                else                            o.osc[i].am = &o.osc[o.pset.cvs[i    ]].out;
 
-                if     (o.cvs[i + 5] == 3) o.osc[i].fm = &o.sq.out;
-                else if(o.cvs[i + 5] == 4) o.osc[i].fm = &o.sq.env.feed;
-                else                       o.osc[i].fm = &o.osc[o.cvs[i + 5]].out;
+                if     (o.pset.cvs[i + 5] == 3) o.osc[i].fm = &o.sq.out;
+                else if(o.pset.cvs[i + 5] == 4) o.osc[i].fm = &o.sq.env.feed;
+                else                            o.osc[i].fm = &o.osc[o.pset.cvs[i + 5]].out;
             }
-            eax[ 9] = (float)rand_in_range(1, 4096); // Q
-            o.cvs[3] = rand_in_range(0, 4);
 
-            if     (o.cvs[3] == 3) o.q = &o.sq.out;
-            else if(o.cvs[3] == 4) o.q = &o.sq.env.feed;
-            else                   o.q = &o.osc[o.cvs[3]].out;
+            eax[ 9] = (float)rand_in_range(1, 4096); // Q
+            o.pset.cvs[3] = rand_in_range(0, 4);
+
+            if     (o.pset.cvs[3] == 3) o.q = &o.sq.out;
+            else if(o.pset.cvs[3] == 4) o.q = &o.sq.env.feed;
+            else                        o.q = &o.osc[o.pset.cvs[3]].out;
 
             eax[10] = (float)rand_in_range(1, 4096); // Cutoff
-            o.cvs[4] = rand_in_range(0, 4);
+            o.pset.cvs[4] = rand_in_range(0, 4);
 
-            o.cva[3] = (float)eax[ 9]/4096.0f;
-            o.cva[4] = (float)eax[10]/4096.0f; // Cutoff
+            o.pset.cva[3] = (float)eax[ 9]/4096.0f;
+            o.pset.cva[4] = (float)eax[10]/4096.0f; // Cutoff
 
-            if     (o.cvs[4] == 3) o.f = &o.sq.out;
-            else if(o.cvs[4] == 4) o.f = &o.sq.env.feed;
-            else                   o.f = &o.osc[o.cvs[4]].out;
+            if     (o.pset.cvs[4] == 3) o.f = &o.sq.out;
+            else if(o.pset.cvs[4] == 4) o.f = &o.sq.env.feed;
+            else                        o.f = &o.osc[o.pset.cvs[4]].out;
 
             eax[0] = rand_in_range(1, 4096);
             eax[1] = rand_in_range(1, 4096);
@@ -427,7 +312,7 @@ void core1_interrupt_handler()
             o.sq.env.r  = eax[1]*32;
             o.sq.length = eax[2]/32 + 1;
 
-            o.vcfid  = rand_in_range(0, 4);
+            o.pset.vcfid  = rand_in_range(0, 4);
 
             o.sq.on     = rand()&1;
             o.sq.env.on = rand()&1;
@@ -442,24 +327,24 @@ void core1_interrupt_handler()
 
         if(page == 0)
         {
-            o.osc[0].f = entry_handler(o.pot[0], o.osc[0].f, 0, 1, 4096); // fA
-            o.osc[1].f = entry_handler(o.pot[1], o.osc[1].f, 1, 1, 4096); // fB
-            o.osc[2].f = entry_handler(o.pot[2], o.osc[2].f, 2, 1, 4096); // fC
+            o.pset.freq[0] = entry_handler(o.pset.pot[0], o.pset.freq[0], 0, 1, 4096); // fA
+            o.pset.freq[1] = entry_handler(o.pset.pot[1], o.pset.freq[1], 1, 1, 4096); // fB
+            o.pset.freq[2] = entry_handler(o.pset.pot[2], o.pset.freq[2], 2, 1, 4096); // fC
 
-            eax[0] = entry_handler(o.pot[3], eax[0], 3, 1, 4096); // Attack
-            eax[1] = entry_handler(o.pot[4], eax[1], 4, 1, 4096); // Release
-            eax[2] = entry_handler(o.pot[5], eax[2], 5, 1, 4096); // BPM
+            eax[0] = entry_handler(o.pset.pot[3], eax[0], 3, 1, 4096); // Attack
+            eax[1] = entry_handler(o.pset.pot[4], eax[1], 4, 1, 4096); // Release
+            eax[2] = entry_handler(o.pset.pot[5], eax[2], 5, 1, 4096); // BPM
 
             oledWriteString(&oled, 0,  0, 0,  "   |TUNE        ", 1, 0, 1);
 
             oledWriteString(&oled, 0,  0, 1, oct[o.osc[0].oct], 1, item%3==0, 1);
-            oledWriteString(&oled, 0, 32, 1, progress(o.osc[0].f), 1, 0, 1);
+            oledWriteString(&oled, 0, 32, 1, progress(o.pset.freq[0]), 1, 0, 1);
             
             oledWriteString(&oled, 0,  0, 2, oct[o.osc[1].oct], 1, item%3==1, 1);
-            oledWriteString(&oled, 0, 32, 2, progress(o.osc[1].f), 1, 0, 1);
+            oledWriteString(&oled, 0, 32, 2, progress(o.pset.freq[1]), 1, 0, 1);
 
             oledWriteString(&oled, 0,  0, 3, oct[o.osc[2].oct], 1, item%3==2, 1);
-            oledWriteString(&oled, 0, 32, 3, progress(o.osc[2].f), 1, 0, 1);
+            oledWriteString(&oled, 0, 32, 3, progress(o.pset.freq[2]), 1, 0, 1);
             
             oledWriteString(&oled, 0,  0, 4, "   |ENVELOPE    ", 1, 0, 1);
 
@@ -486,13 +371,13 @@ void core1_interrupt_handler()
         else if(page == 1)
         {
             // Amplitude /////////////////////////////////////////////////
-            eax[3] = entry_handler(o.pot[0], eax[3], 0, 1, 4096);
-            eax[4] = entry_handler(o.pot[1], eax[4], 1, 1, 4096);
-            eax[5] = entry_handler(o.pot[2], eax[5], 2, 1, 4096);
+            eax[3] = entry_handler(o.pset.pot[0], eax[3], 0, 1, 4096);
+            eax[4] = entry_handler(o.pset.pot[1], eax[4], 1, 1, 4096);
+            eax[5] = entry_handler(o.pset.pot[2], eax[5], 2, 1, 4096);
             // AM ////////////////////////////////////////////////////////
-            eax[6] = entry_handler(o.pot[3], eax[6], 3, 1, 4096);
-            eax[7] = entry_handler(o.pot[4], eax[7], 4, 1, 4096);
-            eax[8] = entry_handler(o.pot[5], eax[8], 5, 1, 4096);
+            eax[6] = entry_handler(o.pset.pot[3], eax[6], 3, 1, 4096);
+            eax[7] = entry_handler(o.pset.pot[4], eax[7], 4, 1, 4096);
+            eax[8] = entry_handler(o.pset.pot[5], eax[8], 5, 1, 4096);
 
 
             oledWriteString(&oled, 0,  0, 0,  "   |AMP         ", 1, 0, 1);
@@ -509,13 +394,13 @@ void core1_interrupt_handler()
 
             oledWriteString(&oled, 0,  0, 4,  "   |AM          ", 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 5, msrc[o.cvs[0]], 1, item==3, 1);
+            oledWriteString(&oled, 0,  0, 5, msrc[o.pset.cvs[0]], 1, item==3, 1);
             oledWriteString(&oled, 0, 32, 5, progress(eax[6]), 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 6, msrc[o.cvs[1]], 1, item==4, 1);
+            oledWriteString(&oled, 0,  0, 6, msrc[o.pset.cvs[1]], 1, item==4, 1);
             oledWriteString(&oled, 0, 32, 6, progress(eax[7]), 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 7, msrc[o.cvs[2]], 1, item==5, 1);
+            oledWriteString(&oled, 0,  0, 7, msrc[o.pset.cvs[2]], 1, item==5, 1);
             oledWriteString(&oled, 0, 32, 7, progress(eax[8]), 1, 0, 1);
 
             for(int i = 1; i < 8; i++)
@@ -526,50 +411,50 @@ void core1_interrupt_handler()
             o.osc[1].amp = (float)eax[4]/4096.0f;
             o.osc[2].amp = (float)eax[5]/4096.0f;
 
-            o.cva[0] = (float)eax[6]/4096.0f;
-            o.cva[1] = (float)eax[7]/4096.0f;
-            o.cva[2] = (float)eax[8]/4096.0f;
+            o.pset.cva[0] = (float)eax[6]/4096.0f;
+            o.pset.cva[1] = (float)eax[7]/4096.0f;
+            o.pset.cva[2] = (float)eax[8]/4096.0f;
 
             for(int i = 0; i < 3; i++)
             {
-                if     (o.cvs[i] == 3) o.osc[i].am = &o.sq.out;
-                else if(o.cvs[i] == 4) o.osc[i].am = &o.sq.env.feed;
-                else                   o.osc[i].am = &o.osc[o.cvs[i]].out;
+                if     (o.pset.cvs[i] == 3) o.osc[i].am = &o.sq.out;
+                else if(o.pset.cvs[i] == 4) o.osc[i].am = &o.sq.env.feed;
+                else                        o.osc[i].am = &o.osc[o.pset.cvs[i]].out;
             }
         }
 
         else if(page == 2)
         {
             // FILTER //////////////////////////////////////////////
-            eax[ 9] = entry_handler(o.pot[1], eax[ 9], 1, 1, 4096); // Q
-            eax[10] = entry_handler(o.pot[2], eax[10], 2, 1, 4096); // Cutoff
+            eax[ 9] = entry_handler(o.pset.pot[1], eax[ 9], 1, 1, 4096); // Q
+            eax[10] = entry_handler(o.pset.pot[2], eax[10], 2, 1, 4096); // Cutoff
             // FM ///////////////////////////////////////////////
-            eax[11] = entry_handler(o.pot[3], eax[11], 3, 1, 4096);
-            eax[12] = entry_handler(o.pot[4], eax[12], 4, 1, 4096);
-            eax[13] = entry_handler(o.pot[5], eax[13], 5, 1, 4096);
+            eax[11] = entry_handler(o.pset.pot[3], eax[11], 3, 1, 4096);
+            eax[12] = entry_handler(o.pset.pot[4], eax[12], 4, 1, 4096);
+            eax[13] = entry_handler(o.pset.pot[5], eax[13], 5, 1, 4096);
 
 
             oledWriteString(&oled, 0,  0, 0,  "   |VCF         ", 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 1, ft[o.vcfid], 1, item==0, 1);
+            oledWriteString(&oled, 0,  0, 1, ft[o.pset.vcfid], 1, item==0, 1);
             oledWriteString(&oled, 0, 32, 1, "             ", 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 2, msrc[o.cvs[3]], 1, item == 1, 1);
+            oledWriteString(&oled, 0,  0, 2, msrc[o.pset.cvs[3]], 1, item == 1, 1);
             oledWriteString(&oled, 0, 32, 2, progress(eax[9]), 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 3, msrc[o.cvs[4]], 1, item == 2, 1);
+            oledWriteString(&oled, 0,  0, 3, msrc[o.pset.cvs[4]], 1, item == 2, 1);
             oledWriteString(&oled, 0, 32, 3, progress(eax[10]), 1, 0, 1);
 
 
             oledWriteString(&oled, 0,  0, 4,  "   |FM          ", 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 5, msrc[o.cvs[5]], 1, item == 3, 1);
+            oledWriteString(&oled, 0,  0, 5, msrc[o.pset.cvs[5]], 1, item == 3, 1);
             oledWriteString(&oled, 0, 32, 5, progress(eax[11]), 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 6, msrc[o.cvs[6]], 1, item == 4, 1);
+            oledWriteString(&oled, 0,  0, 6, msrc[o.pset.cvs[6]], 1, item == 4, 1);
             oledWriteString(&oled, 0, 32, 6, progress(eax[12]), 1, 0, 1);
 
-            oledWriteString(&oled, 0,  0, 7, msrc[o.cvs[7]], 1, item == 5, 1);
+            oledWriteString(&oled, 0,  0, 7, msrc[o.pset.cvs[7]], 1, item == 5, 1);
             oledWriteString(&oled, 0, 32, 7, progress(eax[13]), 1, 0, 1);
 
             for(int i = 1; i < 8; i++)
@@ -577,26 +462,26 @@ void core1_interrupt_handler()
                 oledWriteString(&oled, 0, 24, i,  "|", 1, 0, 1);
             }
 
-            o.cva[3] = (float)eax[ 9]/4096.0f;
-            o.cva[4] = (float)eax[10]/4096.0f;
+            o.pset.cva[3] = (float)eax[ 9]/4096.0f;
+            o.pset.cva[4] = (float)eax[10]/4096.0f;
 
-            o.cva[5] = (float)eax[11]/4096.0f;
-            o.cva[6] = (float)eax[12]/4096.0f;
-            o.cva[7] = (float)eax[13]/4096.0f;
+            o.pset.cva[5] = (float)eax[11]/4096.0f;
+            o.pset.cva[6] = (float)eax[12]/4096.0f;
+            o.pset.cva[7] = (float)eax[13]/4096.0f;
 
-            if     (o.cvs[3] == 3) o.q = &o.sq.out;
-            else if(o.cvs[3] == 4) o.q = &o.sq.env.feed;
-            else                   o.q = &o.osc[o.cvs[3]].out;
+            if     (o.pset.cvs[3] == 3) o.q = &o.sq.out;
+            else if(o.pset.cvs[3] == 4) o.q = &o.sq.env.feed;
+            else                        o.q = &o.osc[o.pset.cvs[3]].out;
 
-            if     (o.cvs[4] == 3) o.f = &o.sq.out;
-            else if(o.cvs[4] == 4) o.f = &o.sq.env.feed;
-            else                   o.f = &o.osc[o.cvs[4]].out;
+            if     (o.pset.cvs[4] == 3) o.f = &o.sq.out;
+            else if(o.pset.cvs[4] == 4) o.f = &o.sq.env.feed;
+            else                        o.f = &o.osc[o.pset.cvs[4]].out;
 
             for(int i = 0; i < 3; i++)
             {
-                if     (o.cvs[i + 5] == 3) o.osc[i].fm = &o.sq.out;
-                else if(o.cvs[i + 5] == 4) o.osc[i].fm = &o.sq.env.feed;
-                else                       o.osc[i].fm = &o.osc[o.cvs[i + 5]].out;
+                if     (o.pset.cvs[i + 5] == 3) o.osc[i].fm = &o.sq.out;
+                else if(o.pset.cvs[i + 5] == 4) o.osc[i].fm = &o.sq.env.feed;
+                else                            o.osc[i].fm = &o.osc[o.pset.cvs[i + 5]].out;
             }
         }
 
@@ -606,7 +491,7 @@ void core1_interrupt_handler()
 
             for(int i = 0; i < 6; i++)
             {
-                seq[i + 6 * seg] = entry_handler(o.pot[i], seq[i  + 6 * seg], i, 1, 4096);
+                seq[i + 6 * seg] = entry_handler(o.pset.pot[i], seq[i  + 6 * seg], i, 1, 4096);
             }
 
             for(int i = 0; i < 12; i++)
@@ -716,13 +601,16 @@ int main()
 
     adc_select_input(4);
     srand(adc_read());
-
-
-
-
-
-    sleep_ms(100);
     oledFill(&oled, 0,1);
+    ////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////
+    loadInit();
+  
+    sleep_ms(300);
+    ////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////
+
 
     while (true) 
 	{

@@ -58,16 +58,17 @@ void spawner_init(spawner* o)
     for(int i = 0; i < oscn; i++)
     {
         o->osc[i].pwm = &o->osc[i].out;
-        o->osc[i].pwa = &o->cva[6 + i];
+        o->osc[i].f   = &o->pset.freq[i];
+        o->osc[i].pwa = &o->pset.cva[6 + i];
         o->osc[i].fm  = &o->osc[i].out;
         o->osc[i].am  = &o->osc[i].out;
-        o->osc[i].aa  = &o->cva[3 + i];
-        o->osc[i].fa  = &o->cva[i];
+        o->osc[i].aa  = &o->pset.cva[3 + i];
+        o->osc[i].fa  = &o->pset.cva[i];
         oscillator_init(&o->osc[i]);
     }
     o->f = &o->osc[0].out;
     o->q = &o->osc[0].out;
-    o->vcfid = 1;
+    o->pset.vcfid = 1;
 
 
     for(int i = 0; i < 128; i++)
@@ -103,12 +104,12 @@ void spawn(spawner* o)
     if(o->sq.env.on) o->feed *= o->sq.env.feed;
     o->feed  = limit(&o->lim, o->feed);
 
-    int c = o->pot[6] / 32 + (int)(*o->f*o->cva[4]*128.0f);
+    int c = o->pset.pot[6] / 32 + (int)(*o->f*o->pset.cva[4]*128.0f);
     if (c < 0) c = 0; else if (c > 127) c = 127;
 
-    float q = (float)o->pot[7]/1365.0f + *o->q*o->cva[3]*3.2f;
+    float q = (float)o->pset.pot[7]/1365.0f + *o->q*o->pset.cva[3]*3.2f;
     if (q < 0.2f) q = 0.2f; else if (q > 3.2)  q = 3.2f;
 
     svflto_init(&o->svf, c, q);
-    o->feed  = filter[o->vcfid](o, o->feed);
+    o->feed  = filter[o->pset.vcfid](o, o->feed);
 }

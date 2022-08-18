@@ -21,7 +21,7 @@
 
 typedef struct
 {
-    float  f;             // Frequency
+    float* f;             // Frequency
     float  phase;         // Current phase
     float  delta;         // Phase increment
     float  amp;           // Overall amplitude

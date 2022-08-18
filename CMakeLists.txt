@@ -15,7 +15,7 @@ add_executable(ff
 	ff.c
 )
 add_subdirectory(pico-ss-oled build/ssoled)
-add_subdirectory(littlefs-lib build/littlefs)
+add_subdirectory(littlefs build/littlefs)
 add_subdirectory(cell build/cell)
 
 # enable usb output, disable uart output
@@ -31,7 +31,7 @@ target_link_libraries(ff PRIVATE
 	hardware_adc
 	hardware_i2c
 	pico_ss_oled
-	littlefs-lib
+	littlefs
 )
 
 
