@@ -5,13 +5,13 @@
 
 typedef struct
 {
-    ar    env;
-    int   departed;      // current time in samples
-    int   length;        // step duration in samples
-    int   current;       // current step
-    float note[STEPS];
-    float out;
-    bool  on;
+    ar     env;
+    int    departed;      // current time in samples
+    int    length;        // step duration in samples
+    int    current;       // current step
+    float* note;
+    float  out;
+    bool*  on;
 
 } sequencer;
 

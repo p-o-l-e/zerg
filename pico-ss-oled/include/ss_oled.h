@@ -133,6 +133,7 @@ void oledWriteFlashBlock(SSOLED *pOLED, uint8_t *s, int iLen);
 
 int oledWriteString(SSOLED *pOLED, int iScroll, int x, int y, char *szMsg, int iSize, int bInvert, int bRender);
 int oledWriteStringV(SSOLED *pOLED, int iScroll, int x, int y, char *szMsg, int iSize, int bInvert, int bRender);
+int oledWriteStringF(SSOLED *pOLED, int iScroll, int x, int y, uint8_t symbol, char* font, int bInvert);
 
 // void oledWriteDataBlock(SSOLED *pOLED, unsigned char *ucBuf, int iLen, int bRender);
 

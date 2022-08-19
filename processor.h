@@ -2,17 +2,18 @@
 #include "feeder.h"
 #include "4051.h"
 #include "littlefs/fio.h"
-#define LAG4051  100
+#define LAG4051   100
 
 
 static spawner o;
-#define NPSF 9
+#define NPSF      9
 #define THRESHOLD 8
 static psf   PSF[NPSF]; // Parameter smooth filters
 static gator GTR[NPSF];
 
 static lfs_t      lfs;
 static lfs_file_t INIT;
+
 
 void get_parameters()
 {
@@ -52,36 +53,95 @@ void get_parameters()
 }
 
 
+void set_parameters()
+{
+    for(int i = 0; i < oscn; i++)
+    {
+        set_delta(&o);
+
+        if     (o.pset.cvs[i    ] == 3) o.osc[i].am = &o.sq.out;
+        else if(o.pset.cvs[i    ] == 4) o.osc[i].am = &o.sq.env.feed;
+        else                            o.osc[i].am = &o.osc[o.pset.cvs[i    ]].out;
+
+        if     (o.pset.cvs[i + 5] == 3) o.osc[i].fm = &o.sq.out;
+        else if(o.pset.cvs[i + 5] == 4) o.osc[i].fm = &o.sq.env.feed;
+        else                            o.osc[i].fm = &o.osc[o.pset.cvs[i + 5]].out;
+    }
+
+    if     (o.pset.cvs[3] == 3) o.q = &o.sq.out;
+    else if(o.pset.cvs[3] == 4) o.q = &o.sq.env.feed;
+    else                        o.q = &o.osc[o.pset.cvs[3]].out;
+
+    if     (o.pset.cvs[4] == 3) o.f = &o.sq.out;
+    else if(o.pset.cvs[4] == 4) o.f = &o.sq.env.feed;
+    else                        o.f = &o.osc[o.pset.cvs[4]].out;
+
+    o.sq.env.a  = o.pset.eax[0]*32;
+    o.sq.env.r  = o.pset.eax[1]*32;
+    o.sq.length = o.pset.eax[2]/32 + 1;
+
+    ar_setf(&o.sq.env);
+
+}
+
 int loadInit()
 {
-    // mount the filesystem
     int err = lfs_mount(&lfs, &CFG);
-    // reformat if we can't mount the filesystem
-    // this should only happen on the first boot
+
     if (err) 
     {
         lfs_format(&lfs, &CFG);
-        lfs_mount(&lfs, &CFG);
-        // create the boot count file
+        lfs_mount (&lfs, &CFG);
 
         lfs_file_open (&lfs, &INIT, "PRESETS", LFS_O_RDWR | LFS_O_CREAT);
         lfs_file_write(&lfs, &INIT, &o.pset, sizeof(o.pset));
         lfs_file_close(&lfs, &INIT);
     }
-    // read current count
     lfs_file_open(&lfs, &INIT, "PRESETS", LFS_O_RDWR);
     lfs_file_read(&lfs, &INIT, &o.pset, sizeof(o.pset));
 
-    // update boot count
-    // lfs_file_rewind(&lfs, &INIT);
-    // lfs_file_write(&lfs, &INIT, &boot_count, sizeof(boot_count));
-
-    // remember the storage is not updated until the file is closed successfully
     lfs_file_close(&lfs, &INIT);
-    // release any resources we were using
     lfs_unmount(&lfs);
-
+    set_parameters();
 }
+
+
+
+int loadFile(int n, const char* path)
+{
+
+    int err = lfs_mount(&lfs, &CFG);
+    if (err) 
+    {
+        lfs_format(&lfs, &CFG);
+        lfs_mount (&lfs, &CFG);
+
+        lfs_file_open (&lfs, &INIT, path, LFS_O_RDWR | LFS_O_CREAT);
+        lfs_file_write(&lfs, &INIT, &o.pset, sizeof(o.pset));
+        lfs_file_close(&lfs, &INIT);
+    }
+
+    if(lfs_file_open (&lfs, &INIT, path, LFS_O_RDWR) == 0)
+    {
+        lfs_file_read (&lfs, &INIT, &o.pset, sizeof(o.pset));
+        lfs_file_close(&lfs, &INIT);
+    }
+
+    lfs_unmount(&lfs);
+    set_parameters();
+}
+
+
+int saveFile(int n, const char* path)
+{
+    int err = lfs_mount(&lfs, &CFG);
+    lfs_file_open (&lfs, &INIT, path, LFS_O_RDWR | LFS_O_CREAT);
+    lfs_file_write(&lfs, &INIT, &o.pset, sizeof(o.pset));
+    lfs_file_close(&lfs, &INIT);
+    lfs_unmount(&lfs);
+    return err;
+}
+
 
 int saveInit()
 {
@@ -90,4 +150,5 @@ int saveInit()
     lfs_file_write(&lfs, &INIT, &o.pset, sizeof(o.pset));
     lfs_file_close(&lfs, &INIT);
     lfs_unmount(&lfs);
+    return err;
 }

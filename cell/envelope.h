@@ -11,7 +11,7 @@ typedef struct
     float fa;
     float fr;
     float feed;
-    bool  on;
+    bool* on;
 
 } ar;
 

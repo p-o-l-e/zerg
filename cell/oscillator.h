@@ -24,7 +24,7 @@ typedef struct
     float* f;             // Frequency
     float  phase;         // Current phase
     float  delta;         // Phase increment
-    float  amp;           // Overall amplitude
+    float* amp;           // Overall amplitude
     float* fm;            // Frequency modulation
     float* fa;            // FM Amount
     float* am;            // Amplitude modulation
@@ -32,8 +32,8 @@ typedef struct
     float* pwm;           // Pulse width modulation: 0 < 1 
     float* pwa;           // PWM Amount
     float  out;           // Output: x, y, z
-    int    form;
-    int    oct;           // Octave
+    int*   form;
+    int*   oct;           // Octave
     int    shift;         // Frequency shift
 
 } oscillator; 

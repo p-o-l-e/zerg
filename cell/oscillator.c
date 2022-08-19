@@ -14,15 +14,13 @@ float get_chroma(int n) { return chromatic[n]; };
 void oscillator_init(oscillator* o)
 { 
     o->phase = 0.0f;
-    o->form  = 0;
-    o->oct   = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////
 void set_delta(oscillator* o)
 { 
-    int f  = (int)(octave[o->oct] + (octave[o->oct + 1] - octave[o->oct])/4096.0f * (float)*o->f);
+    int f  = (int)(octave[*o->oct] + (octave[*o->oct + 1] - octave[*o->oct])/4096.0f * (float)*o->f);
     o->delta = chromatic[f + o->shift] * TAO / SAMPLE_RATE;
 }
 
@@ -30,8 +28,8 @@ void set_delta(oscillator* o)
 // Waveforms: VCO //////////////////////////////////////////////////////////////////////
 void oRamp(oscillator* o) 
 {
-    o->out  = o->phase/PI;
-    o->out *= o->amp + fabsf(*o->am**o->aa);
+    o->out  =  o->phase/PI;
+    o->out *= *o->amp + fabsf(*o->am**o->aa);
 
     o->phase += o->delta + fabsf(*o->fm**o->fa);
     while(o->phase > PI) o->phase -= TAO;
@@ -40,7 +38,7 @@ void oRamp(oscillator* o)
 void oSaw(oscillator* o) 
 {
     o->out  = -o->phase/PI;
-    o->out *=  o->amp + fabsf(*o->am**o->aa);
+    o->out *= *o->amp + fabsf(*o->am**o->aa);
 
     o->phase += o->delta + fabsf(*o->fm**o->fa);
     while(o->phase > PI) o->phase -= TAO;
@@ -48,8 +46,8 @@ void oSaw(oscillator* o)
 
 void oSquare(oscillator* o)
 {
-    o->out  = o->phase > 0.0f ? -1.0f : 1.0f;
-    o->out *= o->amp + fabsf(*o->am**o->aa);
+    o->out  =  o->phase > 0.0f ? -1.0f : 1.0f;
+    o->out *= *o->amp + fabsf(*o->am**o->aa);
 
     o->phase += o->delta + fabsf(*o->fm**o->fa);
     while(o->phase > PI) o->phase -= TAO;
@@ -58,7 +56,7 @@ void oSquare(oscillator* o)
 void oTriangle(oscillator* o)
 {
     o->out  = 2.0f * (fabsf(o->phase / PI) - 0.5f);
-    o->out *= o->amp + fabsf(*o->am**o->aa);
+    o->out *= *o->amp + fabsf(*o->am**o->aa);
 
     o->phase += o->delta + fabsf(*o->fm**o->fa);
     while(o->phase > PI) o->phase -= TAO;
@@ -66,16 +64,16 @@ void oTriangle(oscillator* o)
 
 void oNoise(oscillator* o)
 {
-    o->out = (float)rand()/(float)(RAND_MAX) * 2.0f - 1.0f;
-    o->out *= o->amp + fabsf(*o->am**o->aa);
+    o->out  = (float)rand()/(float)(RAND_MAX) * 2.0f - 1.0f;
+    o->out *= *o->amp + fabsf(*o->am**o->aa);
 }
 
 void oRandStep(oscillator* o)
 {
     static float eax;
     o->out = eax;
-    o->out   *= o->amp   + fabsf(*o->am**o->aa);
-    o->phase += o->delta + fabsf(*o->fm**o->fa);
+    o->out   *= *o->amp   + fabsf(*o->am**o->aa);
+    o->phase +=  o->delta + fabsf(*o->fm**o->fa);
     while(o->phase > PI) 
     {
         o->phase -= TAO;

@@ -64,8 +64,14 @@ void spawner_init(spawner* o)
         o->osc[i].am  = &o->osc[i].out;
         o->osc[i].aa  = &o->pset.cva[3 + i];
         o->osc[i].fa  = &o->pset.cva[i];
+        o->osc[i].form= &o->pset.form[i];
+        o->osc[i].amp = &o->pset.amp[i];
+        o->osc[i].oct = &o->pset.oct[i];
         oscillator_init(&o->osc[i]);
     }
+    o->sq.on = &o->pset.sqon;
+    o->sq.env.on = &o->pset.envon;
+    o->sq.note = o->pset.note;
     o->f = &o->osc[0].out;
     o->q = &o->osc[0].out;
     o->pset.vcfid = 1;
@@ -85,8 +91,8 @@ void modulate(spawner* o)
     process_sequence(&o->sq);
     for(int i = 0; i < oscn; i++)
     {
-        if(o->sq.on) o->osc[i].shift = roundf(get_note(&o->sq) * 24.0f);
-        else         o->osc[i].shift = 0;
+        if(*o->sq.on) o->osc[i].shift = roundf(get_note(&o->sq) * 24.0f);
+        else          o->osc[i].shift = 0;
 
         set_delta(&o->osc[i]);
     }
@@ -98,10 +104,10 @@ void spawn(spawner* o)
     ar_process(&o->sq.env);
     for(int i = 0; i < oscn; i++)
     {
-        form[o->osc[i].form](&o->osc[i]);
+        form[o->pset.form[i]](&o->osc[i]);
         o->feed += o->osc[i].out;
     }
-    if(o->sq.env.on) o->feed *= o->sq.env.feed;
+    if(*o->sq.env.on) o->feed *= o->sq.env.feed;
     o->feed  = limit(&o->lim, o->feed);
 
     int c = o->pset.pot[6] / 32 + (int)(*o->f*o->pset.cva[4]*128.0f);

@@ -587,3 +587,16 @@ int oledWriteStringV(SSOLED *pOLED, int iScroll, int x, int y, char *szMsg, int 
     }
     return -1; // invalid size
 }
+
+
+int oledWriteStringF(SSOLED *pOLED, int iScroll, int x, int y, uint8_t symbol, char* font, int bInvert)
+{
+    pOLED->iCursorX = x; pOLED->iCursorY = y; // set the new cursor position
+    oledSetPosition(pOLED, pOLED->iCursorX, pOLED->iCursorY, 1);
+    // we can't directly use the pointer to FLASH memory, so copy to a local buffer
+    unsigned char ucTemp = 0;
+    memcpy(&ucTemp, &font[symbol], 7);
+
+    oledWriteDataBlock(pOLED, &ucTemp, 7, 1); // write character pattern
+    return 0;
+}
